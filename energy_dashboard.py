@@ -134,11 +134,12 @@ PRODUCTS["cooking"] = {
     "label": "🍳 전기 쿠킹",
     "api_id": "m6gi-ng33",
     "keyword_map": {
-        "Brand Name": (["brand"], []),
+        "Brand Name": (["brand"], ["partner"]),
         "Model Number": (["model", "number"], ["additional", "identifier"]),
         "Product Type": (["product", "type"], []),
         "Installation Type": (["installation"], []),
         "Cooking Top Technology": (["cooking", "technology"], ["zone", "time"]),
+        "Control Type": (["control", "type"], []),
         "Width (inches)": (["width"], []),
         "Height (inches)": (["height"], []),
         "Depth (inches)": (["depth"], []),
@@ -146,26 +147,41 @@ PRODUCTS["cooking"] = {
         "Voltage (volts)": (["voltage"], []),
         "Amperage (amps)": (["amperage"], []),
         "Annual Energy Consumption (kWh/yr)": (["annual", "energy"], ["low", "oven", "cooking"]),
+        "Low Power Mode - Cooktop (kWh/yr)": (["low", "power", "cooking"], ["oven"]),
+        "Low Power Mode - Oven (kWh/yr)": (["low", "power", "oven"], ["cooking"]),
+        "Avg Cooking Zone Time (min)": (["average", "cooking", "zone", "time"], []),
+        "Markets": (["market"], ["date", "available"]),
         "Date Available On Market": (["date", "available"], []),
         "Date Certified": (["date", "certif"], []),
     },
     "numeric_order": [
-        "Annual Energy Consumption (kWh/yr)", "Voltage (volts)", "Amperage (amps)",
-        "Number of Cooking Zones", "Width (inches)", "Height (inches)", "Depth (inches)",
+        "Annual Energy Consumption (kWh/yr)",
+        "Low Power Mode - Cooktop (kWh/yr)", "Low Power Mode - Oven (kWh/yr)",
+        "Avg Cooking Zone Time (min)",
+        "Amperage (amps)", "Number of Cooking Zones",
+        "Width (inches)", "Height (inches)", "Depth (inches)",
     ],
     "default_n": 3,
-    "color_cols": ["Brand Name", "Product Type", "Cooking Top Technology"],
+    "color_cols": ["Brand Name", "Product Type", "Cooking Top Technology",
+                   "Installation Type", "Control Type"],
     "filters": [
         {"col": "Product Type", "label": "제품 유형", "icon": "🍳"},
         {"col": "Installation Type", "label": "설치 유형", "icon": "🔧"},
         {"col": "Cooking Top Technology", "label": "조리 기술", "icon": "🔥"},
+        {"col": "Control Type", "label": "제어 방식", "icon": "🎛️"},
+        {"col": "Markets", "label": "마켓", "icon": "🌍"},
     ],
     "kpis": [
         {"label": "평균 연간 에너지", "col": "Annual Energy Consumption (kWh/yr)", "fmt": "{:.1f} kWh", "color": "#1a7c5c"},
-        {"label": "평균 전압", "col": "Voltage (volts)", "fmt": "{:.0f}V", "color": "#7b3f9e"},
+        {"label": "평균 전류", "col": "Amperage (amps)", "fmt": "{:.1f}A", "color": "#7b3f9e"},
         {"label": "평균 조리 구역", "col": "Number of Cooking Zones", "fmt": "{:.1f}개", "color": "#c0392b"},
+        {"label": "평균 조리 시간", "col": "Avg Cooking Zone Time (min)", "fmt": "{:.1f}분", "color": "#e67e22"},
     ],
-    "fill_defaults": {"Model Number": "N/A", "Product Type": "Unknown", "Installation Type": "Unknown", "Cooking Top Technology": "Unknown"},
+    "fill_defaults": {
+        "Model Number": "N/A", "Product Type": "Unknown",
+        "Installation Type": "Unknown", "Cooking Top Technology": "Unknown",
+        "Control Type": "Unknown", "Markets": "Unknown",
+    },
     "core_dropna": ["Annual Energy Consumption (kWh/yr)"],
 }
 
@@ -313,6 +329,8 @@ for pkey, pcfg in PRODUCTS.items():
                 "Product Type": px.colors.qualitative.Light24,
                 "Cooking Top Technology": px.colors.qualitative.Safe,
                 "Installation Type": px.colors.qualitative.Pastel,
+                "Control Type": px.colors.qualitative.Set1,
+                "Markets": px.colors.qualitative.Dark2,
                 "Heat Pump": px.colors.qualitative.Pastel,
                 "Type": px.colors.qualitative.Set2,
             }
@@ -376,7 +394,81 @@ app = Dash(
     __name__,
     title="에너지 라벨 분석 대시보드",
     suppress_callback_exceptions=True,
+    meta_tags=[
+        {"name": "viewport", "content": "width=device-width, initial-scale=1.0"},
+    ],
 )
+
+# ── 모바일 반응형 CSS ──────────────────────────────────────────────
+app.index_string = '''<!DOCTYPE html>
+<html>
+<head>
+{%metas%}
+<title>{%title%}</title>
+{%favicon%}
+{%css%}
+<style>
+/* ── 모바일 반응형 ── */
+@media (max-width: 768px) {
+    /* 헤더 */
+    .dash-header { flex-direction: column !important; padding: 14px 16px !important; gap: 10px; }
+    .dash-header h1 { font-size: 16px !important; }
+    .dash-header p  { font-size: 11px !important; }
+    .dash-header button { font-size: 11px !important; padding: 6px 10px !important; width: 100%; }
+
+    /* 탭 */
+    .tab { padding: 10px 12px !important; font-size: 12px !important; }
+
+    /* 컨텐츠 영역 */
+    .tab-content { padding: 12px 10px !important; }
+
+    /* KPI 카드 */
+    .kpi-row { flex-direction: column !important; gap: 8px !important; }
+    .kpi-row > div { min-width: unset !important; }
+
+    /* 컨트롤 패널 */
+    .ctrl-panel { padding: 12px 14px !important; }
+    .ctrl-row { flex-direction: column !important; gap: 12px !important; }
+    .ctrl-row > div { min-width: unset !important; flex: unset !important; width: 100% !important; }
+
+    /* 필터 영역 */
+    .filter-area { flex-direction: column !important; gap: 16px !important; }
+    .filter-area > div { min-width: unset !important; flex: unset !important; width: 100% !important;
+                         padding-left: 0 !important; border-left: none !important;
+                         border-top: 1px dashed #e0e0e0; padding-top: 12px; }
+    .filter-area > div:first-child { border-top: none; padding-top: 0; }
+
+    /* 차트 */
+    .splom-graph { height: 500px !important; }
+    .year-chart  { height: 280px !important; }
+
+    /* 차트 헤더 */
+    .chart-header { flex-direction: column !important; gap: 8px !important; align-items: flex-start !important; }
+    .chart-header > div { width: 100% !important; }
+
+    /* 범례 */
+    .js-plotly-plot .plotly .legend { display: none !important; }
+
+    /* 푸터 */
+    .dash-footer { padding: 10px 16px !important; }
+}
+
+@media (max-width: 480px) {
+    .dash-header h1 { font-size: 14px !important; }
+    .splom-graph { height: 400px !important; }
+    .year-chart  { height: 240px !important; }
+}
+</style>
+</head>
+<body>
+{%app_entry%}
+<footer>
+{%config%}
+{%scripts%}
+{%renderer%}
+</footer>
+</body>
+</html>'''
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  6. 헬퍼
@@ -505,7 +597,7 @@ else:
             dcc.Download(id="dl-header-raw"),
 
             # ── 헤더 ────────────────────────────────────────────────────
-            html.Div(style={
+            html.Div(className="dash-header", style={
                 "background":"linear-gradient(135deg,#1a3a6b 0%,#2a5298 100%)",
                 "padding":"22px 40px","color":"white",
                 "boxShadow":"0 3px 10px rgba(0,0,0,0.25)",
@@ -554,7 +646,8 @@ else:
                             "borderTop": "3px solid #2a5298",
                         },
                         children=[
-                            html.Div(id=f"{pkey}-tab-content", style={"padding":"24px 40px"})
+                            html.Div(id=f"{pkey}-tab-content", className="tab-content",
+                                     style={"padding":"24px 40px"})
                         ]
                     )
                     for pkey in LOADED
@@ -562,7 +655,7 @@ else:
             ),
 
             # ── 푸터 ──────────────────────────────────────────────────────
-            html.Div(style={
+            html.Div(className="dash-footer", style={
                 "padding":"14px 40px","borderTop":"1px solid #e0e0e0",
                 "backgroundColor":"white","textAlign":"center",
             }, children=[
@@ -974,12 +1067,12 @@ def _register_callbacks(app, pkey, pdata, pcfg):
 
         return html.Div([
             # KPI
-            html.Div(style={"display":"flex","gap":"14px",
+            html.Div(className="kpi-row", style={"display":"flex","gap":"14px",
                             "marginBottom":"20px","flexWrap":"wrap"}, children=kpi_items),
 
             # 컨트롤 패널
-            html.Div(style=CARD, children=[
-                html.Div(style={"display":"flex","gap":"24px","flexWrap":"wrap",
+            html.Div(className="ctrl-panel", style=CARD, children=[
+                html.Div(className="ctrl-row", style={"display":"flex","gap":"24px","flexWrap":"wrap",
                                 "alignItems":"flex-end","marginBottom":"20px"}, children=[
                     html.Div(style={"flex":"3","minWidth":"340px"}, children=[
                         html.Label("📊  분석 변수 선택 (2개 이상)", style=LABEL),
@@ -1021,7 +1114,7 @@ def _register_callbacks(app, pkey, pdata, pcfg):
                 html.Hr(style={"border":"none","borderTop":"1px dashed #e0e0e0",
                                "margin":"4px 0 20px"}),
 
-                html.Div(style={"display":"flex","gap":"0","flexWrap":"wrap"}, children=[
+                html.Div(className="filter-area", style={"display":"flex","gap":"0","flexWrap":"wrap"}, children=[
                     # 브랜드
                     html.Div(style={"flex":"1.2","minWidth":"220px",
                                     "paddingRight":"20px"}, children=[
@@ -1078,7 +1171,7 @@ def _register_callbacks(app, pkey, pdata, pcfg):
 
             # SPLOM
             html.Div(style=CARD, children=[
-                html.Div(style={"display":"flex","justifyContent":"space-between",
+                html.Div(className="chart-header", style={"display":"flex","justifyContent":"space-between",
                                 "alignItems":"center","marginBottom":"16px","gap":"12px"}, children=[
                     html.Div(id=f"{pkey}-chart-title",
                              style={"fontSize":"15px","fontWeight":"600","color":"#2a2a2a","flex":"1"}),
@@ -1108,6 +1201,7 @@ def _register_callbacks(app, pkey, pdata, pcfg):
                                 "filename":f"{pkey}_splom",
                             },
                         },
+                        className="splom-graph",
                         style={"height":"820px"},
                     )
                 ),
@@ -1138,6 +1232,7 @@ def _register_callbacks(app, pkey, pdata, pcfg):
                                 "filename":f"{pkey}_year_brand",
                             },
                         },
+                        className="year-chart",
                         style={"height":"380px"},
                     )
                 ),
