@@ -290,6 +290,15 @@ def _clean_product_data(raw: pd.DataFrame, config: dict) -> tuple[pd.DataFrame, 
     if core:
         df = df.dropna(subset=core, how="all")
 
+    # ── 단위 정규화: mm 단위로 보이는 치수(>100) → inches 변환 ──
+    for dim_col in [c for c in df.columns if "(inches)" in c]:
+        if dim_col in df.columns:
+            vals = pd.to_numeric(df[dim_col], errors="coerce")
+            mm_mask = vals > 100
+            if mm_mask.any():
+                df.loc[mm_mask, dim_col] = vals[mm_mask] / 25.4
+                print(f"  🔄  {dim_col}: {mm_mask.sum()}건 mm→inches 변환")
+
     df["Release Year"] = df["Release Year"].fillna(CURRENT_YEAR).astype(int)
     if missing:
         print(f"  ⚠️  매핑 실패 컬럼: {missing}")
