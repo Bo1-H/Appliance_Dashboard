@@ -1,7 +1,7 @@
 # =============================================================================
-#  에너지 라벨 분석 대시보드  v5.0  (멀티 제품군)
+#  에너지 라벨 분석 대시보드  v6.0  (멀티 리전 · 멀티 제품군)
+#  Energy Star (US/CA) · Energy Rating (AU/NZ) · EPREL (EU, 준비중)
 #  실행: pip install dash plotly pandas numpy requests  →  python energy_dashboard.py
-#  접속: http://127.0.0.1:8050
 # =============================================================================
 
 import datetime, json, io
@@ -17,19 +17,49 @@ from dash import (
 from dash.exceptions import PreventUpdate
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  0. 연도 상수
+#  0. 상수
 # ─────────────────────────────────────────────────────────────────────────────
 CURRENT_YEAR = datetime.datetime.now().year
 YEAR_MIN     = CURRENT_YEAR - 10
 YEAR_MAX     = CURRENT_YEAR
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  1. 제품 설정 (Config-driven)
+#  1. 리전 설정
+# ─────────────────────────────────────────────────────────────────────────────
+REGIONS = OrderedDict([
+    ("energystar", {
+        "label": "Energy Star",
+        "subtitle": "미국 · 캐나다",
+        "icon": "⚡",
+        "gradient": "linear-gradient(135deg,#1a3a6b 0%,#2a5298 100%)",
+        "accent": "#2a5298",
+    }),
+    ("energyrating", {
+        "label": "Energy Rating",
+        "subtitle": "호주 · 뉴질랜드",
+        "icon": "⭐",
+        "gradient": "linear-gradient(135deg,#1a5c3a 0%,#2a9852 100%)",
+        "accent": "#1a7c5c",
+    }),
+    ("eprel", {
+        "label": "EPREL",
+        "subtitle": "유럽",
+        "icon": "🏷️",
+        "gradient": "linear-gradient(135deg,#4a1a6b 0%,#7b3f9e 100%)",
+        "accent": "#7b3f9e",
+    }),
+])
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  2. 제품 설정
 # ─────────────────────────────────────────────────────────────────────────────
 PRODUCTS = OrderedDict()
 
-# 1. 식기세척기
+# ═══════════════  Energy Star (US/CA)  ═══════════════════════════════════════
+
 PRODUCTS["dishwasher"] = {
+    "region": "energystar",
+    "source": "energystar",
     "label": "🍽️ 식기세척기",
     "api_id": "q8py-6w3f",
     "keyword_map": {
@@ -73,8 +103,9 @@ PRODUCTS["dishwasher"] = {
     "core_dropna": ["Annual Energy Use (kWh/yr)", "Water Use (gallons/cycle)"],
 }
 
-# 2. 건조기
 PRODUCTS["dryer"] = {
+    "region": "energystar",
+    "source": "energystar",
     "label": "👕 건조기",
     "api_id": "t9u7-4d2j",
     "keyword_map": {
@@ -129,8 +160,9 @@ PRODUCTS["dryer"] = {
     "core_dropna": ["Estimated Annual Energy Use (kWh/yr)"],
 }
 
-# 3. 전기 쿠킹
 PRODUCTS["cooking"] = {
+    "region": "energystar",
+    "source": "energystar",
     "label": "🍳 전기 쿠킹",
     "api_id": "m6gi-ng33",
     "keyword_map": {
@@ -185,8 +217,161 @@ PRODUCTS["cooking"] = {
     "core_dropna": ["Annual Energy Consumption (kWh/yr)"],
 }
 
+# ═══════════════  Energy Rating (AU/NZ)  ════════════════════════════════════
+
+PRODUCTS["au_dishwasher"] = {
+    "region": "energyrating",
+    "source": "ckan",
+    "ckan_keyword": "dishwasher",
+    "label": "🍽️ 식기세척기",
+    "column_rename": {
+        "Brand": "Brand Name",
+        "Model No": "Model Number",
+        "Family Name": "Family Name",
+        "Type": "Type",
+        "Cap": "Capacity (Place Settings)",
+        "Labelled energy consumption (kWh/year)": "Labelled Energy (kWh/yr)",
+        "Tot Wat Cons": "Total Water (L/wash)",
+        "Water Consumption (litres)": "Water Consumption (L)",
+        "New Star": "Star Rating",
+        "New SRI": "Star Rating Index (SRI)",
+        "Width": "Width (mm)",
+        "Height": "Height (mm)",
+        "Depth": "Depth (mm)",
+        "Conn_Type": "Connection Type",
+        "Load_Type": "Load Type",
+        "Sold_in": "Markets",
+        "Prog Time": "Program Time (min)",
+        "GrandDate": "Date Certified",
+        "ExpDate": "Expiry Date",
+        "standbyPowerUsage": "Standby Power (W)",
+        "Availability Status": "Availability Status",
+    },
+    "keyword_map": {
+        "Brand Name": (["brand", "name"], []),
+        "Model Number": (["model", "number"], ["family"]),
+        "Family Name": (["family", "name"], []),
+        "Type": (["type"], ["connection", "load", "product"]),
+        "Capacity (Place Settings)": (["capacity", "place"], []),
+        "Labelled Energy (kWh/yr)": (["labelled", "energy"], []),
+        "Total Water (L/wash)": (["total", "water"], ["consumption"]),
+        "Water Consumption (L)": (["water", "consumption"], ["total"]),
+        "Star Rating": (["star", "rating"], ["old", "image", "index"]),
+        "Star Rating Index (SRI)": (["star", "rating", "index"], []),
+        "Width (mm)": (["width"], []),
+        "Height (mm)": (["height"], []),
+        "Depth (mm)": (["depth"], []),
+        "Connection Type": (["connection", "type"], []),
+        "Load Type": (["load", "type"], []),
+        "Markets": (["market"], []),
+        "Program Time (min)": (["program", "time"], []),
+        "Standby Power (W)": (["standby", "power"], []),
+        "Date Certified": (["date", "certif"], []),
+        "Availability Status": (["availability", "status"], []),
+    },
+    "numeric_order": [
+        "Labelled Energy (kWh/yr)", "Total Water (L/wash)", "Water Consumption (L)",
+        "Capacity (Place Settings)", "Star Rating", "Star Rating Index (SRI)",
+        "Program Time (min)", "Standby Power (W)",
+        "Width (mm)", "Height (mm)", "Depth (mm)",
+    ],
+    "default_n": 3,
+    "color_cols": ["Brand Name", "Type", "Connection Type", "Load Type"],
+    "filters": [
+        {"col": "Type", "label": "제품 유형", "icon": "📐"},
+        {"col": "Connection Type", "label": "연결 유형", "icon": "🔌"},
+        {"col": "Load Type", "label": "로드 유형", "icon": "📦"},
+        {"col": "Markets", "label": "판매 지역", "icon": "🌏"},
+    ],
+    "kpis": [
+        {"label": "평균 에너지 소비", "col": "Labelled Energy (kWh/yr)", "fmt": "{:.1f} kWh", "color": "#1a7c5c"},
+        {"label": "평균 물 사용량", "col": "Total Water (L/wash)", "fmt": "{:.1f} L", "color": "#7b3f9e"},
+        {"label": "평균 스타 등급", "col": "Star Rating", "fmt": "{:.1f} ★", "color": "#c0392b"},
+        {"label": "평균 용량", "col": "Capacity (Place Settings)", "fmt": "{:.0f}인분", "color": "#e67e22"},
+    ],
+    "fill_defaults": {
+        "Model Number": "N/A", "Type": "Unknown",
+        "Connection Type": "Unknown", "Load Type": "Unknown", "Markets": "Unknown",
+    },
+    "core_dropna": ["Labelled Energy (kWh/yr)"],
+}
+
+PRODUCTS["au_dryer"] = {
+    "region": "energyrating",
+    "source": "ckan",
+    "ckan_keyword": "dryer",
+    "label": "👕 건조기",
+    "column_rename": {
+        "Brand": "Brand Name",
+        "Model No": "Model Number",
+        "Family Name": "Family Name",
+        "Type": "Type",
+        "Cap": "Capacity (kg)",
+        "Labelled energy consumption (kWh/year)": "Labelled Energy (kWh/yr)",
+        "New Star": "Star Rating",
+        "New SRI": "Star Rating Index (SRI)",
+        "Control": "Control Type",
+        "Combination": "Combination",
+        "Width": "Width (mm)",
+        "Height": "Height (mm)",
+        "Depth": "Depth (mm)",
+        "Sold_in": "Markets",
+        "Prog Time": "Program Time (min)",
+        "GrandDate": "Date Certified",
+        "ExpDate": "Expiry Date",
+        "Tot_Wat_Cons": "Total Water (L)",
+        "Test_Moist_Remove": "Moisture Removal (%)",
+        "Availability Status": "Availability Status",
+    },
+    "keyword_map": {
+        "Brand Name": (["brand", "name"], []),
+        "Model Number": (["model", "number"], ["family"]),
+        "Family Name": (["family", "name"], []),
+        "Type": (["type"], ["control", "product"]),
+        "Capacity (kg)": (["capacity", "kg"], []),
+        "Labelled Energy (kWh/yr)": (["labelled", "energy"], []),
+        "Star Rating": (["star", "rating"], ["old", "image", "index"]),
+        "Star Rating Index (SRI)": (["star", "rating", "index"], []),
+        "Control Type": (["control", "type"], []),
+        "Combination": (["combination"], []),
+        "Width (mm)": (["width"], []),
+        "Height (mm)": (["height"], []),
+        "Depth (mm)": (["depth"], []),
+        "Markets": (["market"], []),
+        "Program Time (min)": (["program", "time"], []),
+        "Moisture Removal (%)": (["moisture", "removal"], []),
+        "Total Water (L)": (["total", "water"], []),
+        "Date Certified": (["date", "certif"], []),
+        "Availability Status": (["availability", "status"], []),
+    },
+    "numeric_order": [
+        "Labelled Energy (kWh/yr)", "Capacity (kg)",
+        "Star Rating", "Star Rating Index (SRI)",
+        "Program Time (min)", "Moisture Removal (%)", "Total Water (L)",
+        "Width (mm)", "Height (mm)", "Depth (mm)",
+    ],
+    "default_n": 3,
+    "color_cols": ["Brand Name", "Type", "Control Type", "Combination"],
+    "filters": [
+        {"col": "Type", "label": "건조 방식", "icon": "🌀"},
+        {"col": "Control Type", "label": "제어 방식", "icon": "🎛️"},
+        {"col": "Combination", "label": "복합 여부", "icon": "🔗"},
+        {"col": "Markets", "label": "판매 지역", "icon": "🌏"},
+    ],
+    "kpis": [
+        {"label": "평균 에너지 소비", "col": "Labelled Energy (kWh/yr)", "fmt": "{:.1f} kWh", "color": "#1a7c5c"},
+        {"label": "평균 용량", "col": "Capacity (kg)", "fmt": "{:.1f} kg", "color": "#7b3f9e"},
+        {"label": "평균 스타 등급", "col": "Star Rating", "fmt": "{:.1f} ★", "color": "#c0392b"},
+    ],
+    "fill_defaults": {
+        "Model Number": "N/A", "Type": "Unknown",
+        "Control Type": "Unknown", "Combination": "Unknown", "Markets": "Unknown",
+    },
+    "core_dropna": ["Labelled Energy (kWh/yr)"],
+}
+
 # ─────────────────────────────────────────────────────────────────────────────
-#  2. 헬퍼 함수
+#  3. 헬퍼 함수
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _norm_col(c: str) -> str:
@@ -209,10 +394,10 @@ def _find_col(columns: list[str], include: list[str], exclude: list[str]) -> str
 
 
 def _fetch_api_data(api_id: str) -> tuple[pd.DataFrame | None, str]:
-    """API ID에 따라 데이터 페치 (JSON 시도 후 CSV 폴백)"""
+    """Energy Star API: JSON 시도 후 CSV 폴백"""
     api_url = f"https://data.energystar.gov/resource/{api_id}.json?$limit=50000"
     csv_url = f"https://data.energystar.gov/api/views/{api_id}/rows.csv?accessType=DOWNLOAD"
-
+    err_json = ""
     try:
         import requests
         print(f"  ⏳  API(JSON) {api_id} 요청 중...")
@@ -242,6 +427,34 @@ def _fetch_api_data(api_id: str) -> tuple[pd.DataFrame | None, str]:
     return None, f"JSON: {err_json}\nCSV: {err_csv}"
 
 
+def _fetch_ckan_data(ckan_keyword: str) -> tuple[pd.DataFrame | None, str]:
+    """호주 Energy Rating CKAN API에서 CSV 다운로드"""
+    meta_url = "https://data.gov.au/data/api/3/action/package_show?id=energy-rating-for-household-appliances"
+    try:
+        import requests
+        print(f"  ⏳  CKAN 메타데이터 요청 중...")
+        resp = requests.get(meta_url, timeout=30)
+        resp.raise_for_status()
+        pkg = resp.json().get("result", {})
+
+        for res in pkg.get("resources", []):
+            name_lower = res.get("name", "").lower()
+            fmt = res.get("format", "").upper()
+            if fmt == "CSV" and ckan_keyword.lower() in name_lower:
+                csv_url = res["url"]
+                print(f"  ⏳  CKAN CSV 다운로드: {res['name']}...")
+                csv_resp = requests.get(csv_url, timeout=60)
+                csv_resp.raise_for_status()
+                df = pd.read_csv(io.StringIO(csv_resp.text))
+                print(f"  ✅  CKAN CSV {len(df)}건")
+                return df, ""
+
+        return None, f"CKAN에서 '{ckan_keyword}' CSV를 찾을 수 없습니다."
+    except Exception as e:
+        print(f"  ⚠️  CKAN 실패: {e}")
+        return None, str(e)
+
+
 def _clean_product_data(raw: pd.DataFrame, config: dict) -> tuple[pd.DataFrame, list[str]]:
     """설정 기반 데이터 정제"""
     cols_orig = raw.columns.tolist()
@@ -266,7 +479,7 @@ def _clean_product_data(raw: pd.DataFrame, config: dict) -> tuple[pd.DataFrame, 
                 df[c].astype(str).str.replace("%", "").str.strip(), errors="coerce"
             )
 
-    # 출시연도: "Date Available On Market" 우선, 없으면 "Date Certified" 폴백
+    # 출시연도
     for date_col in ["Date Available On Market", "Date Certified"]:
         if date_col in df.columns:
             dt    = pd.to_datetime(df[date_col], errors="coerce")
@@ -278,7 +491,7 @@ def _clean_product_data(raw: pd.DataFrame, config: dict) -> tuple[pd.DataFrame, 
     if "Release Year" not in df.columns:
         df["Release Year"] = CURRENT_YEAR
 
-    # 기본값 채우기 (컬럼 없으면 생성, 있으면 NaN을 기본값으로 채움)
+    # 기본값 채우기
     for c, default in config["fill_defaults"].items():
         if c not in df.columns:
             df[c] = default
@@ -290,30 +503,40 @@ def _clean_product_data(raw: pd.DataFrame, config: dict) -> tuple[pd.DataFrame, 
     if core:
         df = df.dropna(subset=core, how="all")
 
-    # ── 단위 정규화: mm 단위로 보이는 치수(>100) → inches 변환 ──
+    # mm→inches 변환 (Energy Star 데이터 중 일부)
     for dim_col in [c for c in df.columns if "(inches)" in c]:
-        if dim_col in df.columns:
-            vals = pd.to_numeric(df[dim_col], errors="coerce")
-            mm_mask = vals > 100
-            if mm_mask.any():
-                df.loc[mm_mask, dim_col] = vals[mm_mask] / 25.4
-                print(f"  🔄  {dim_col}: {mm_mask.sum()}건 mm→inches 변환")
+        vals = pd.to_numeric(df[dim_col], errors="coerce")
+        mm_mask = vals > 100
+        if mm_mask.any():
+            df.loc[mm_mask, dim_col] = vals[mm_mask] / 25.4
+            print(f"  🔄  {dim_col}: {mm_mask.sum()}건 mm→inches 변환")
 
     df["Release Year"] = df["Release Year"].fillna(CURRENT_YEAR).astype(int)
     if missing:
         print(f"  ⚠️  매핑 실패 컬럼: {missing}")
     return df.reset_index(drop=True), missing
 
+
 # ─────────────────────────────────────────────────────────────────────────────
-#  3. 데이터 로딩 (모든 제품 시도)
+#  4. 데이터 로딩
 # ─────────────────────────────────────────────────────────────────────────────
-LOADED = {}  # pkey -> {"df": df, "df_raw": raw_df, "brands": [...], ...}
+LOADED = {}
 
 for pkey, pcfg in PRODUCTS.items():
-    print(f"\n📦  {pcfg['label']} 로딩 중...")
-    raw, api_error = _fetch_api_data(pcfg["api_id"])
+    region_label = REGIONS.get(pcfg.get("region", ""), {}).get("label", "")
+    print(f"\n📦  [{region_label}] {pcfg['label']} 로딩 중...")
+
+    source = pcfg.get("source", "energystar")
+    if source == "ckan":
+        raw, api_error = _fetch_ckan_data(pcfg["ckan_keyword"])
+    else:
+        raw, api_error = _fetch_api_data(pcfg["api_id"])
 
     if raw is not None:
+        # CKAN 데이터: 컬럼명 변환
+        if "column_rename" in pcfg:
+            raw = raw.rename(columns=pcfg["column_rename"])
+
         df_raw = raw.copy()
         df, missing = _clean_product_data(raw, pcfg)
 
@@ -326,7 +549,6 @@ for pkey, pcfg in PRODUCTS.items():
 
             color_cols = [c for c in pcfg["color_cols"] if c in df.columns]
 
-            # 색상 맵 생성
             _PAL_SRC = {
                 "Brand Name": (px.colors.qualitative.Bold
                               + px.colors.qualitative.Vivid
@@ -342,6 +564,9 @@ for pkey, pcfg in PRODUCTS.items():
                 "Markets": px.colors.qualitative.Dark2,
                 "Heat Pump": px.colors.qualitative.Pastel,
                 "Type": px.colors.qualitative.Set2,
+                "Connection Type": px.colors.qualitative.Set1,
+                "Load Type": px.colors.qualitative.Dark2,
+                "Combination": px.colors.qualitative.Pastel,
             }
             color_maps = {}
             for col in color_cols:
@@ -349,7 +574,6 @@ for pkey, pcfg in PRODUCTS.items():
                 vals = sorted(df[col].dropna().unique().tolist())
                 color_maps[col] = {v: pal[i % len(pal)] for i, v in enumerate(vals)}
 
-            # 필터값 목록
             all_filters = {}
             for f in pcfg["filters"]:
                 col = f["col"]
@@ -371,12 +595,20 @@ for pkey, pcfg in PRODUCTS.items():
         else:
             print(f"  ⚠️  유효한 행이 {len(df)}건뿐이어서 스킵됨")
     else:
-        print(f"  ❌  API 오류: {api_error[:100]}")
+        print(f"  ❌  오류: {api_error[:100]}")
 
-print(f"\n총 {len(LOADED)}개 제품군 로딩 완료\n")
+# 리전별 제품 그룹핑
+REGION_PRODUCTS = {}
+for pkey in LOADED:
+    region = PRODUCTS[pkey]["region"]
+    REGION_PRODUCTS.setdefault(region, []).append(pkey)
+
+print(f"\n총 {len(LOADED)}개 제품군 로딩 완료")
+for rkey, pkeys in REGION_PRODUCTS.items():
+    print(f"  {REGIONS[rkey]['label']}: {[PRODUCTS[pk]['label'] for pk in pkeys]}")
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  4. 공통 스타일
+#  5. 스타일
 # ─────────────────────────────────────────────────────────────────────────────
 CARD  = {"backgroundColor":"white","borderRadius":"12px","padding":"20px 24px",
          "boxShadow":"0 2px 12px rgba(0,0,0,0.08)","marginBottom":"20px"}
@@ -397,7 +629,7 @@ _CHKBOX_LABEL = {"display":"flex","alignItems":"center","marginBottom":"6px",
                  "fontSize":"13px","color":"#333","cursor":"pointer","lineHeight":"1.4"}
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  5. 앱 초기화
+#  6. 앱 초기화
 # ─────────────────────────────────────────────────────────────────────────────
 app = Dash(
     __name__,
@@ -408,7 +640,6 @@ app = Dash(
     ],
 )
 
-# ── 모바일 반응형 CSS ──────────────────────────────────────────────
 app.index_string = '''<!DOCTYPE html>
 <html>
 <head>
@@ -417,51 +648,29 @@ app.index_string = '''<!DOCTYPE html>
 {%favicon%}
 {%css%}
 <style>
-/* ── 모바일 반응형 ── */
 @media (max-width: 768px) {
-    /* 헤더 */
     .dash-header { flex-direction: column !important; padding: 14px 16px !important; gap: 10px; }
     .dash-header h1 { font-size: 16px !important; }
     .dash-header p  { font-size: 11px !important; }
     .dash-header button { font-size: 11px !important; padding: 6px 10px !important; width: 100%; }
-
-    /* 탭 */
-    .tab { padding: 10px 12px !important; font-size: 12px !important; }
-
-    /* 컨텐츠 영역 */
     .tab-content { padding: 12px 10px !important; }
-
-    /* KPI 카드 */
     .kpi-row { flex-direction: column !important; gap: 8px !important; }
     .kpi-row > div { min-width: unset !important; }
-
-    /* 컨트롤 패널 */
     .ctrl-panel { padding: 12px 14px !important; }
     .ctrl-row { flex-direction: column !important; gap: 12px !important; }
     .ctrl-row > div { min-width: unset !important; flex: unset !important; width: 100% !important; }
-
-    /* 필터 영역 */
     .filter-area { flex-direction: column !important; gap: 16px !important; }
     .filter-area > div { min-width: unset !important; flex: unset !important; width: 100% !important;
                          padding-left: 0 !important; border-left: none !important;
                          border-top: 1px dashed #e0e0e0; padding-top: 12px; }
     .filter-area > div:first-child { border-top: none; padding-top: 0; }
-
-    /* 차트 */
     .splom-graph { height: 500px !important; }
     .year-chart  { height: 280px !important; }
-
-    /* 차트 헤더 */
     .chart-header { flex-direction: column !important; gap: 8px !important; align-items: flex-start !important; }
     .chart-header > div { width: 100% !important; }
-
-    /* 범례 */
     .js-plotly-plot .plotly .legend { display: none !important; }
-
-    /* 푸터 */
     .dash-footer { padding: 10px 16px !important; }
 }
-
 @media (max-width: 480px) {
     .dash-header h1 { font-size: 14px !important; }
     .splom-graph { height: 400px !important; }
@@ -480,7 +689,7 @@ app.index_string = '''<!DOCTYPE html>
 </html>'''
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  6. 헬퍼
+#  7. UI 헬퍼
 # ─────────────────────────────────────────────────────────────────────────────
 def _kpi(label, value, accent):
     return html.Div(style={
@@ -495,9 +704,17 @@ def _kpi(label, value, accent):
     ])
 
 
+# 전역 색상맵
+COLOR_MAPS_GLOBAL = {}
+for pkey, pdata in LOADED.items():
+    for col, cmap in pdata["color_maps"].items():
+        if col not in COLOR_MAPS_GLOBAL:
+            COLOR_MAPS_GLOBAL[col] = {}
+        COLOR_MAPS_GLOBAL[col].update(cmap)
+
+
 def _filter_col(title, icon, checklist_id, all_vals, col_key, outer_border=True):
-    """필터 컬럼 컴포넌트"""
-    color_hint = COLOR_MAPS_GLOBAL.get(col_key, {}) if len(LOADED) > 0 else {}
+    color_hint = COLOR_MAPS_GLOBAL.get(col_key, {})
 
     def _dot(val):
         c = color_hint.get(val, "#ccc")
@@ -537,19 +754,74 @@ def _filter_col(title, icon, checklist_id, all_vals, col_key, outer_border=True)
     ])
 
 
-# 전역 색상맵 (모든 제품의 색상정보 통합)
-COLOR_MAPS_GLOBAL = {}
-for pkey, pdata in LOADED.items():
-    for col, cmap in pdata["color_maps"].items():
-        if col not in COLOR_MAPS_GLOBAL:
-            COLOR_MAPS_GLOBAL[col] = {}
-        COLOR_MAPS_GLOBAL[col].update(cmap)
+# ─────────────────────────────────────────────────────────────────────────────
+#  8. 레이아웃
+# ─────────────────────────────────────────────────────────────────────────────
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  7. 레이아웃
-# ─────────────────────────────────────────────────────────────────────────────
+def _build_region_header(rkey, rcfg, region_products):
+    """리전별 헤더 생성"""
+    total = sum(len(LOADED[pk]["df"]) for pk in region_products)
+    n_products = len(region_products)
+    return html.Div(className="dash-header", style={
+        "background": rcfg["gradient"],
+        "padding":"22px 40px","color":"white",
+        "boxShadow":"0 3px 10px rgba(0,0,0,0.25)",
+        "display":"flex","justifyContent":"space-between","alignItems":"center",
+    }, children=[
+        html.Div([
+            html.H1(f"{rcfg['icon']}  {rcfg['label']} 에너지 분석",
+                    style={"margin":0,"fontSize":"22px","fontWeight":"700"}),
+            html.P(f"{rcfg['subtitle']}  |  총 {total:,}개 제품  ·  {n_products}개 제품군",
+                   style={"margin":"6px 0 0","opacity":0.8,"fontSize":"13px"}),
+        ]),
+        html.Button(
+            "⬇  Raw 데이터 전체 (CSV)",
+            id=f"{rkey}-header-export-raw-btn", n_clicks=0,
+            style={**BTN_BLUE,
+                   "backgroundColor":"rgba(255,255,255,0.2)",
+                   "border":"1px solid rgba(255,255,255,0.5)"},
+        ),
+    ])
+
+
+def _build_region_content(rkey, rcfg, region_products):
+    """리전별 콘텐츠 (헤더 + 제품 탭)"""
+    year_marks = {y: {"label": str(y), "style": {"fontSize":"11px","color":"#666"}}
+                  for y in range(YEAR_MIN, YEAR_MAX + 1)}
+
+    return html.Div([
+        _build_region_header(rkey, rcfg, region_products),
+        dcc.Download(id=f"{rkey}-dl-header-raw"),
+        dcc.Tabs(
+            id=f"{rkey}-product-tabs",
+            value=region_products[0],
+            style={"marginBottom": 0},
+            children=[
+                dcc.Tab(
+                    label=PRODUCTS[pkey]["label"],
+                    value=pkey,
+                    style={
+                        "padding": "16px 36px","fontSize": "15px","fontWeight": "600",
+                        "color": "#666","backgroundColor": "#e8ecf1",
+                        "borderTop": "3px solid transparent","letterSpacing": "0.3px",
+                    },
+                    selected_style={
+                        "padding": "16px 36px","fontSize": "15px","fontWeight": "700",
+                        "color": rcfg["accent"],"backgroundColor": "#ffffff",
+                        "borderTop": f"3px solid {rcfg['accent']}",
+                    },
+                    children=[
+                        html.Div(id=f"{pkey}-tab-content", className="tab-content",
+                                 style={"padding":"24px 40px"})
+                    ]
+                )
+                for pkey in region_products
+            ]
+        ),
+    ])
+
+
 if len(LOADED) == 0:
-    # API 연결 실패
     app.layout = html.Div(
         style={"fontFamily":"'Segoe UI','Noto Sans KR',sans-serif",
                "backgroundColor":"#f0f2f5","minHeight":"100vh",
@@ -561,115 +833,113 @@ if len(LOADED) == 0:
                 "maxWidth":"640px","textAlign":"center",
             }, children=[
                 html.Div("⚠️", style={"fontSize":"56px","marginBottom":"16px"}),
-                html.H2("Energy Star API 연결 실패",
+                html.H2("데이터 로딩 실패",
                         style={"color":"#c0392b","fontWeight":"700",
                                "fontSize":"22px","margin":"0 0 12px"}),
-                html.P("모든 제품군의 데이터를 불러오지 못했습니다. 아래를 확인하고 앱을 다시 실행해 주세요.",
+                html.P("모든 제품군의 데이터를 불러오지 못했습니다.",
                        style={"color":"#555","fontSize":"14px","margin":"0 0 24px","lineHeight":"1.7"}),
-                html.Div(style={
-                    "backgroundColor":"#eef3fc","borderRadius":"8px",
-                    "padding":"16px 20px","textAlign":"left"}, children=[
-                    html.P("해결 방법", style={"fontWeight":"700","color":"#1a3a6b",
-                                               "fontSize":"12px","margin":"0 0 10px",
-                                               "textTransform":"uppercase"}),
-                    html.Ul(style={"margin":0,"paddingLeft":"18px",
-                                   "fontSize":"13px","color":"#444","lineHeight":"2"}, children=[
-                        html.Li("인터넷 연결 상태를 확인해 주세요."),
-                        html.Li("requests 라이브러리 설치: pip install requests"),
-                        html.Li("VPN 또는 프록시 환경이라면 해제 후 재시도"),
-                    ]),
-                ]),
             ]),
         ]
     )
-
 else:
-    # 정상 대시보드
-    year_marks = {y: {"label": str(y), "style": {"fontSize":"11px","color":"#666"}}
-                  for y in range(YEAR_MIN, YEAR_MAX + 1)}
+    # 리전 탭 스타일
+    _region_tab_style = {
+        "padding": "14px 32px","fontSize": "14px","fontWeight": "600",
+        "color": "rgba(255,255,255,0.7)","backgroundColor": "transparent",
+        "border": "none","borderBottom": "3px solid transparent",
+    }
+    _region_tab_selected = {
+        **_region_tab_style,
+        "color": "white","borderBottom": "3px solid white",
+        "fontWeight": "700",
+    }
 
-    total_products = sum(len(LOADED[pkey]["df"]) for pkey in LOADED)
-    total_brands = len(set().union(*[set(LOADED[pkey]["brands"]) for pkey in LOADED]))
+    default_region = list(REGION_PRODUCTS.keys())[0]
 
     app.layout = html.Div(
         style={"fontFamily":"'Segoe UI','Noto Sans KR',sans-serif",
                "backgroundColor":"#f0f2f5","minHeight":"100vh"},
         children=[
-
-            # ── Store / Download ─────────────────────────────────────────
+            # ── Stores / Downloads ──────────────────────────────────────
             *[dcc.Store(id=f"{pkey}-active-brands-store", data=LOADED[pkey]["top5"])
               for pkey in LOADED],
             dcc.Store(id="esc-setup-store", data=False),
             *[dcc.Download(id=f"{pkey}-dl-raw") for pkey in LOADED],
             *[dcc.Download(id=f"{pkey}-dl-splom") for pkey in LOADED],
             *[dcc.Download(id=f"{pkey}-dl-year") for pkey in LOADED],
-            dcc.Download(id="dl-header-raw"),
 
-            # ── 헤더 ────────────────────────────────────────────────────
-            html.Div(className="dash-header", style={
-                "background":"linear-gradient(135deg,#1a3a6b 0%,#2a5298 100%)",
-                "padding":"22px 40px","color":"white",
-                "boxShadow":"0 3px 10px rgba(0,0,0,0.25)",
-                "display":"flex","justifyContent":"space-between","alignItems":"center",
+            # ── 리전 탭 (최상위) ────────────────────────────────────────
+            html.Div(style={
+                "background": "#0d1117",
+                "padding": "0 40px",
+                "display": "flex",
+                "alignItems": "center",
+                "gap": "0",
+                "boxShadow": "0 2px 8px rgba(0,0,0,0.3)",
             }, children=[
-                html.Div([
-                    html.H1("🔋  에너지 라벨 분석 대시보드",
-                            style={"margin":0,"fontSize":"22px","fontWeight":"700"}),
-                    html.P(f"ENERGY STAR® API  ·  총 {total_products:,}개 제품  ·  {len(LOADED)}개 제품군",
-                           style={"margin":"6px 0 0","opacity":0.8,"fontSize":"13px"}),
+                html.Div(style={"display":"flex","alignItems":"center","gap":"10px",
+                                "paddingRight":"30px","borderRight":"1px solid rgba(255,255,255,0.15)",
+                                "marginRight":"10px"}, children=[
+                    html.Span("🔋", style={"fontSize":"20px"}),
+                    html.Span("에너지 라벨 분석",
+                              style={"color":"white","fontSize":"15px","fontWeight":"700",
+                                     "letterSpacing":"0.5px","whiteSpace":"nowrap"}),
                 ]),
-                html.Button(
-                    "⬇  Energy Star Raw 데이터 전체 (CSV)",
-                    id="header-export-raw-btn", n_clicks=0,
-                    style={**BTN_BLUE,
-                           "backgroundColor":"rgba(255,255,255,0.2)",
-                           "border":"1px solid rgba(255,255,255,0.5)"},
-                    title="현재 활성 탭 제품군의 원본 데이터 전체 (필터 무관)",
+                dcc.Tabs(
+                    id="region-tabs",
+                    value=default_region,
+                    style={"height": "auto", "borderBottom": "none"},
+                    children=[
+                        dcc.Tab(
+                            label=f"{rcfg['icon']}  {rcfg['label']}  ({rcfg['subtitle']})",
+                            value=rkey,
+                            style=_region_tab_style,
+                            selected_style=_region_tab_selected,
+                        )
+                        for rkey, rcfg in REGIONS.items()
+                    ],
                 ),
             ]),
 
-            # ── 탭 ──────────────────────────────────────────────────────
-            dcc.Tabs(
-                id="main-tabs",
-                value=list(LOADED.keys())[0] if LOADED else "dishwasher",
-                style={"marginBottom": 0},
-                children=[
-                    dcc.Tab(
-                        label=PRODUCTS[pkey]["label"],
-                        value=pkey,
-                        style={
-                            "padding": "16px 36px",
-                            "fontSize": "15px",
-                            "fontWeight": "600",
-                            "color": "#666",
-                            "backgroundColor": "#e8ecf1",
-                            "borderTop": "3px solid transparent",
-                            "letterSpacing": "0.3px",
-                        },
-                        selected_style={
-                            "padding": "16px 36px",
-                            "fontSize": "15px",
-                            "fontWeight": "700",
-                            "color": "#1a3a6b",
-                            "backgroundColor": "#ffffff",
-                            "borderTop": "3px solid #2a5298",
-                        },
-                        children=[
-                            html.Div(id=f"{pkey}-tab-content", className="tab-content",
-                                     style={"padding":"24px 40px"})
-                        ]
+            # ── 리전별 콘텐츠 (show/hide) ──────────────────────────────
+            *[
+                html.Div(
+                    id=f"{rkey}-content",
+                    style={} if rkey == default_region else {"display": "none"},
+                    children=(
+                        _build_region_content(rkey, rcfg, REGION_PRODUCTS[rkey])
+                        if rkey in REGION_PRODUCTS
+                        else html.Div(style={
+                            "display":"flex","alignItems":"center","justifyContent":"center",
+                            "minHeight":"60vh","flexDirection":"column","gap":"16px",
+                            "padding":"60px 20px",
+                        }, children=[
+                            html.Div(rcfg["icon"], style={"fontSize":"64px"}),
+                            html.H2(f"{rcfg['label']} ({rcfg['subtitle']})",
+                                    style={"color":"#555","fontWeight":"700","fontSize":"24px","margin":"0"}),
+                            html.P("데이터 연동 준비 중입니다.",
+                                   style={"color":"#999","fontSize":"16px","margin":"0"}),
+                            html.Div(style={
+                                "backgroundColor":"#f8f9fa","borderRadius":"12px",
+                                "padding":"24px 32px","maxWidth":"500px","textAlign":"center",
+                                "border":"1px dashed #ddd",
+                            }, children=[
+                                html.P("이 리전의 에너지 라벨 API가 연동되면 자동으로 활성화됩니다.",
+                                       style={"color":"#888","fontSize":"14px","margin":"0","lineHeight":"1.7"}),
+                            ]),
+                        ])
                     )
-                    for pkey in LOADED
-                ]
-            ),
+                )
+                for rkey, rcfg in REGIONS.items()
+            ],
 
-            # ── 푸터 ──────────────────────────────────────────────────────
+            # ── 푸터 ───────────────────────────────────────────────────
             html.Div(className="dash-footer", style={
                 "padding":"14px 40px","borderTop":"1px solid #e0e0e0",
                 "backgroundColor":"white","textAlign":"center",
             }, children=[
                 html.Span(
-                    "데이터 출처: ENERGY STAR® API  ·  Built with Plotly Dash",
+                    "데이터 출처: ENERGY STAR® API · data.gov.au CKAN  ·  Built with Plotly Dash",
                     style={"color":"#aaa","fontSize":"12px"},
                 ),
             ]),
@@ -678,28 +948,24 @@ else:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  8. 콜백 팩토리
+#  9. 콜백
 # ─────────────────────────────────────────────────────────────────────────────
+
 def _apply_filters(df, pdata, pcfg, y0, y1, color_col, active_brands,
                    filter_values_dict):
-    """필터 마스크 생성 — 브랜드 필터는 color_col과 무관하게 항상 적용"""
     mask = (df["Release Year"] >= y0) & (df["Release Year"] <= y1)
-
-    # 브랜드 필터 항상 적용 (색상 기준과 무관)
     if active_brands:
         mask &= df["Brand Name"].isin(active_brands)
-
     for f in pcfg["filters"]:
         col = f["col"]
         if col in df.columns:
             vals = filter_values_dict.get(col)
             if vals is not None:
                 mask &= df[col].isin(vals)
-
     return mask
 
 
-def _register_callbacks(app, pkey, pdata, pcfg):
+def _register_callbacks(app, pkey, pdata, pcfg, tabs_id):
     """제품별 콜백 등록"""
     df = pdata["df"]
     brands = pdata["brands"]
@@ -709,6 +975,7 @@ def _register_callbacks(app, pkey, pdata, pcfg):
     color_cols = pdata["color_cols"]
     color_maps = pdata["color_maps"]
     all_filters = pdata["all_filters"]
+    region = pcfg["region"]
 
     # ── '전체 선택' 버튼 ─────────────────────────────────────────────
     for f in pcfg["filters"]:
@@ -744,18 +1011,14 @@ def _register_callbacks(app, pkey, pdata, pcfg):
         if not ctx.triggered:
             return current, None
         tid = ctx.triggered[0]["prop_id"]
-        # 전체 추가
         if f"{pkey}-brand-add-all-btn" in tid:
             return brands[:], None
-        # 리셋 (Top5)
         if f"{pkey}-brand-reset-btn" in tid:
             return top5[:], None
-        # 개별 추가
         if f"{pkey}-brand-add-btn" in tid:
             if to_add and to_add not in current:
                 return current + [to_add], None
             return current, None
-        # 개별 제거
         try:
             id_dict = json.loads(tid.split(".")[0])
             if id_dict.get("type") == f"{pkey}-remove-brand":
@@ -842,10 +1105,7 @@ def _register_callbacks(app, pkey, pdata, pcfg):
             dimensions=sel_nums,
             color=color_col,
             hover_name="Model Number",
-            hover_data={
-                "Brand Name":    True,
-                "Release Year":  True,
-            },
+            hover_data={"Brand Name": True, "Release Year": True},
             opacity=0.6,
             color_discrete_map=cmap,
             category_orders=cat_orders,
@@ -952,19 +1212,18 @@ def _register_callbacks(app, pkey, pdata, pcfg):
         subtitle = f"{y0}~{y1}년  ·  {len(dff):,}개 제품  ·  {color_col} 기준"
         return fig, subtitle
 
-    # ── Export: Raw 전체 ──────────────────────────────────────────────
+    # ── Export: Raw ───────────────────────────────────────────────────
     @app.callback(
         Output(f"{pkey}-dl-raw", "data"),
         Input(f"{pkey}-export-raw-btn", "n_clicks"),
         prevent_initial_call=True,
     )
     def export_raw(_):
-        export_df = pdata["df_raw"]
-        return dcc.send_data_frame(export_df.to_csv,
+        return dcc.send_data_frame(pdata["df_raw"].to_csv,
                                    f"energystar_{pkey}_all_raw.csv",
                                    index=False, encoding="utf-8-sig")
 
-    # ── Export: SPLOM ──────────────────────────────────────────────────
+    # ── Export: SPLOM ─────────────────────────────────────────────────
     @app.callback(
         Output(f"{pkey}-dl-splom", "data"),
         Input(f"{pkey}-export-splom-btn", "n_clicks"),
@@ -977,26 +1236,20 @@ def _register_callbacks(app, pkey, pdata, pcfg):
         prevent_initial_call=True,
     )
     def export_splom(n_clicks, sel_nums, yr, color_col, active_brands, *filter_vals):
-        if not n_clicks:
-            raise PreventUpdate
-        if yr is None:
+        if not n_clicks or yr is None:
             raise PreventUpdate
         y0, y1 = yr
-
         filter_values_dict = {}
         for i, f in enumerate(pcfg["filters"]):
-            col = f["col"]
-            filter_values_dict[col] = filter_vals[i]
-
-        mask = _apply_filters(df, pdata, pcfg, y0, y1, color_col, active_brands,
-                             filter_values_dict)
+            filter_values_dict[f["col"]] = filter_vals[i]
+        mask = _apply_filters(df, pdata, pcfg, y0, y1, color_col, active_brands, filter_values_dict)
         meta = [c for c in ["Model Number", "Brand Name", "Release Year"] if c in df.columns]
         cols = meta + [c for c in (sel_nums or []) if c not in meta and c in df.columns]
         dff  = df[mask][cols].copy()
         return dcc.send_data_frame(dff.to_csv, f"{pkey}_splom_{y0}_{y1}.csv",
                                    index=False, encoding="utf-8-sig")
 
-    # ── Export: 연도 집계 ──────────────────────────────────────────────
+    # ── Export: 연도 집계 ─────────────────────────────────────────────
     @app.callback(
         Output(f"{pkey}-dl-year", "data"),
         Input(f"{pkey}-export-year-btn", "n_clicks"),
@@ -1008,43 +1261,40 @@ def _register_callbacks(app, pkey, pdata, pcfg):
         prevent_initial_call=True,
     )
     def export_year(n_clicks, yr, color_col, active_brands, *filter_vals):
-        if not n_clicks:
-            raise PreventUpdate
-        if yr is None:
+        if not n_clicks or yr is None:
             raise PreventUpdate
         y0, y1 = yr
-
         filter_values_dict = {}
         for i, f in enumerate(pcfg["filters"]):
-            col = f["col"]
-            filter_values_dict[col] = filter_vals[i]
-
-        mask = _apply_filters(df, pdata, pcfg, y0, y1, color_col, active_brands,
-                             filter_values_dict)
+            filter_values_dict[f["col"]] = filter_vals[i]
+        mask = _apply_filters(df, pdata, pcfg, y0, y1, color_col, active_brands, filter_values_dict)
         grp  = df[mask].groupby(["Release Year", color_col]).size().reset_index(name="제품 수")
-        return dcc.send_data_frame(grp.to_csv, f"{pkey}_year_brand_{y0}_{y1}.csv",
+        return dcc.send_data_frame(grp.to_csv, f"{pkey}_year_{y0}_{y1}.csv",
                                    index=False, encoding="utf-8-sig")
 
-    # ── 탭 콘텐츠 렌더링 ──────────────────────────────────────────────
+    # ── 탭 콘텐츠 렌더링 ─────────────────────────────────────────────
+    year_marks = {y: {"label": str(y), "style": {"fontSize":"11px","color":"#666"}}
+                  for y in range(YEAR_MIN, YEAR_MAX + 1)}
+
     @app.callback(
         Output(f"{pkey}-tab-content", "children"),
-        Input("main-tabs", "value"),
+        Input(tabs_id, "value"),
+        Input("region-tabs", "value"),
     )
-    def render_tab_content(selected_tab):
+    def render_tab_content(selected_tab, active_region):
+        if active_region != region:
+            return None
         if selected_tab != pkey:
             return None
 
-        # KPI 값 계산
         kpi_items = [_kpi("총 제품 수", f"{len(df):,}개", "#2a5298")]
         for kpi_cfg in pcfg["kpis"]:
             col = kpi_cfg["col"]
             if col in df.columns:
                 mean_val = df[col].mean()
-                fmt = kpi_cfg["fmt"]
-                value = fmt.format(mean_val)
+                value = kpi_cfg["fmt"].format(mean_val)
                 kpi_items.append(_kpi(kpi_cfg["label"], value, kpi_cfg["color"]))
 
-        # 필터 레이아웃 구성: 필터를 col2/col3에 균등 분배
         _valid_filters = [f for f in pcfg["filters"] if f["col"] in all_filters]
         split_idx = 1 if len(_valid_filters) <= 3 else max(1, len(_valid_filters) // 2)
 
@@ -1075,11 +1325,9 @@ def _register_callbacks(app, pkey, pdata, pcfg):
             ))
 
         return html.Div([
-            # KPI
             html.Div(className="kpi-row", style={"display":"flex","gap":"14px",
                             "marginBottom":"20px","flexWrap":"wrap"}, children=kpi_items),
 
-            # 컨트롤 패널
             html.Div(className="ctrl-panel", style=CARD, children=[
                 html.Div(className="ctrl-row", style={"display":"flex","gap":"24px","flexWrap":"wrap",
                                 "alignItems":"flex-end","marginBottom":"20px"}, children=[
@@ -1124,7 +1372,6 @@ def _register_callbacks(app, pkey, pdata, pcfg):
                                "margin":"4px 0 20px"}),
 
                 html.Div(className="filter-area", style={"display":"flex","gap":"0","flexWrap":"wrap"}, children=[
-                    # 브랜드
                     html.Div(style={"flex":"1.2","minWidth":"220px",
                                     "paddingRight":"20px"}, children=[
                         html.Div(style={"display":"flex","justifyContent":"space-between",
@@ -1162,14 +1409,12 @@ def _register_callbacks(app, pkey, pdata, pcfg):
                         ]),
                     ]),
 
-                    # 필터 컬럼 2 (앞쪽 절반)
                     html.Div(style={"flex":"1","minWidth":"160px","paddingLeft":"20px",
                                     "borderLeft":"1px dashed #e0e0e0",
                                     "display":"flex","flexDirection":"column","gap":"16px"}
                              if filter_col2_children else {"display":"none"},
                              children=filter_col2_children),
 
-                    # 필터 컬럼 3 (뒤쪽 절반)
                     html.Div(style={"flex":"1","minWidth":"160px","paddingLeft":"20px",
                                     "borderLeft":"1px dashed #e0e0e0",
                                     "display":"flex","flexDirection":"column","gap":"16px"}
@@ -1178,7 +1423,6 @@ def _register_callbacks(app, pkey, pdata, pcfg):
                 ]),
             ]),
 
-            # SPLOM
             html.Div(style=CARD, children=[
                 html.Div(className="chart-header", style={"display":"flex","justifyContent":"space-between",
                                 "alignItems":"center","marginBottom":"16px","gap":"12px"}, children=[
@@ -1201,16 +1445,13 @@ def _register_callbacks(app, pkey, pdata, pcfg):
                 dcc.Loading(type="circle", color="#2a5298", children=
                     dcc.Graph(
                         id=f"{pkey}-splom-graph",
+                        className="splom-graph",
                         config={
                             "displayModeBar": True,
                             "scrollZoom": True,
                             "modeBarButtonsToRemove": ["lasso2d"],
-                            "toImageButtonOptions": {
-                                "format":"png","scale":2,
-                                "filename":f"{pkey}_splom",
-                            },
+                            "toImageButtonOptions": {"format":"png","scale":2,"filename":f"{pkey}_splom"},
                         },
-                        className="splom-graph",
                         style={"height":"820px"},
                     )
                 ),
@@ -1218,7 +1459,6 @@ def _register_callbacks(app, pkey, pdata, pcfg):
                        style={"fontSize":"12px","color":"#aaa","margin":"10px 0 0","textAlign":"right"}),
             ]),
 
-            # 연도별 등록 제품 수
             html.Div(style=CARD, children=[
                 html.Div(style={"display":"flex","justifyContent":"space-between",
                                 "alignItems":"center","marginBottom":"16px"}, children=[
@@ -1234,20 +1474,16 @@ def _register_callbacks(app, pkey, pdata, pcfg):
                 dcc.Loading(type="circle", color="#2a5298", children=
                     dcc.Graph(
                         id=f"{pkey}-year-chart",
+                        className="year-chart",
                         config={
                             "displayModeBar": True,
-                            "toImageButtonOptions": {
-                                "format":"png","scale":2,
-                                "filename":f"{pkey}_year_brand",
-                            },
+                            "toImageButtonOptions": {"format":"png","scale":2,"filename":f"{pkey}_year"},
                         },
-                        className="year-chart",
                         style={"height":"380px"},
                     )
                 ),
             ]),
 
-            # 사용 가이드
             html.Div(style={**CARD,"backgroundColor":"#eef3fc","border":"1px solid #c5d8f5"}, children=[
                 html.P("💡  사용 가이드",
                        style={"fontWeight":"700","marginBottom":"8px","color":"#1a3a6b"}),
@@ -1256,43 +1492,53 @@ def _register_callbacks(app, pkey, pdata, pcfg):
                     html.Li("분석 변수를 2개 이상 선택하면 N×N 산점도 행렬이 자동 생성됩니다."),
                     html.Li("출시 연도 슬라이더를 조정하면 산점도·막대그래프가 동기화됩니다."),
                     html.Li("브랜드 필터: [＋] 버튼으로 추가, 칩의 [✕]로 개별 제거합니다."),
-                    html.Li("각 필터: 체크박스로 원하는 값만 선택합니다. '전체 선택'으로 초기화할 수 있습니다."),
-                    html.Li("색상 기준을 Brand Name으로 설정하면 브랜드별 색상 레전드가 표시됩니다."),
-                    html.Li("포인트 크기: 산점도 헤더의 숫자 입력란에서 조정합니다."),
-                    html.Li("박스 선택 후 ESC 키 또는 그래프 외부 클릭으로 선택 초기화."),
+                    html.Li("각 필터: 체크박스로 원하는 값만 선택합니다."),
                     html.Li("[⬇ 데이터 추출] 버튼으로 각 차트의 필터된 데이터를 CSV로 저장합니다."),
                 ]),
             ]),
-
         ])
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  9. 콜백 등록
+#  10. 콜백 등록
 # ─────────────────────────────────────────────────────────────────────────────
 if len(LOADED) > 0:
     for pkey, pdata in LOADED.items():
         pcfg = PRODUCTS[pkey]
-        _register_callbacks(app, pkey, pdata, pcfg)
+        region = pcfg["region"]
+        tabs_id = f"{region}-product-tabs"
+        _register_callbacks(app, pkey, pdata, pcfg, tabs_id)
 
-    # ── 헤더 Raw export (활성 탭 제품군 원본) ────────────────────────
+    # ── 리전 탭 전환 (show/hide) ──────────────────────────────────────
     @app.callback(
-        Output("dl-header-raw", "data"),
-        Input("header-export-raw-btn", "n_clicks"),
-        State("main-tabs", "value"),
-        prevent_initial_call=True,
+        [Output(f"{rkey}-content", "style") for rkey in REGIONS],
+        Input("region-tabs", "value"),
     )
-    def export_header_raw(n_clicks, active_tab):
-        if not n_clicks:
-            raise PreventUpdate
-        if active_tab not in LOADED:
-            raise PreventUpdate
-        df_raw = LOADED[active_tab]["df_raw"]
-        return dcc.send_data_frame(df_raw.to_csv,
-                                   f"energystar_{active_tab}_all_raw.csv",
-                                   index=False, encoding="utf-8-sig")
+    def toggle_region(selected):
+        return [
+            {} if rkey == selected else {"display": "none"}
+            for rkey in REGIONS
+        ]
 
-    # ── 글로벌 ESC / 외부 클릭 → SPLOM 선택 초기화 ──────────────────
+    # ── 리전별 Raw export ─────────────────────────────────────────────
+    for rkey in REGION_PRODUCTS:
+        _rkey = rkey  # closure
+
+        @app.callback(
+            Output(f"{_rkey}-dl-header-raw", "data"),
+            Input(f"{_rkey}-header-export-raw-btn", "n_clicks"),
+            State(f"{_rkey}-product-tabs", "value"),
+            prevent_initial_call=True,
+        )
+        def export_region_raw(n_clicks, active_tab, _r=_rkey):
+            if not n_clicks or active_tab not in LOADED:
+                raise PreventUpdate
+            df_raw = LOADED[active_tab]["df_raw"]
+            return dcc.send_data_frame(df_raw.to_csv,
+                                       f"{active_tab}_all_raw.csv",
+                                       index=False, encoding="utf-8-sig")
+
+    # ── ESC / 외부 클릭 → SPLOM 선택 초기화 ──────────────────────────
     _splom_ids_js = ", ".join(f'"{pk}-splom-graph"' for pk in LOADED)
     app.clientside_callback(
         f"""
@@ -1339,10 +1585,9 @@ if len(LOADED) > 0:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  10. 진입점
+#  11. 진입점
 # ─────────────────────────────────────────────────────────────────────────────
 
-# gunicorn이 참조하는 WSGI 서버 객체 (Render 배포 필수)
 server = app.server
 
 if __name__ == "__main__":
@@ -1351,13 +1596,11 @@ if __name__ == "__main__":
     debug = os.environ.get("DASH_DEBUG", "false").lower() == "true"
 
     print("=" * 62)
-    print("  🔋  에너지 라벨 분석 대시보드 v5.0")
-    if len(LOADED) > 0:
-        print(f"  로딩된 제품군: {list(LOADED.keys())}")
-        for pkey in LOADED:
-            print(f"    - {PRODUCTS[pkey]['label']}: {len(LOADED[pkey]['df']):,}건")
-    else:
-        print("  ⚠️  데이터 로딩 실패 — 오류 화면이 표시됩니다.")
-    print(f"  URL          : http://127.0.0.1:{port}")
+    print("  🔋  에너지 라벨 분석 대시보드 v6.0")
+    for rkey, pkeys in REGION_PRODUCTS.items():
+        print(f"  [{REGIONS[rkey]['label']}]")
+        for pk in pkeys:
+            print(f"    - {PRODUCTS[pk]['label']}: {len(LOADED[pk]['df']):,}건")
+    print(f"  URL: http://127.0.0.1:{port}")
     print("=" * 62)
     app.run(debug=debug, host="0.0.0.0", port=port)
